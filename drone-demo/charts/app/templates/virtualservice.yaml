@@ -1,0 +1,42 @@
+{{- if .Values.istio.enabled -}}
+{{- $fullName := include "mychart.fullname" . -}}
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: {{ $fullName }}-virtualservice
+  labels:
+    app.kubernetes.io/name: {{ include "mychart.name" . }}
+    helm.sh/chart: {{ include "mychart.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- with .Values.ingress.annotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
+spec:
+{{- if .Values.istio.tls }}
+  tls:
+  {{- range .Values.istio.tls }}
+    - hosts:
+      {{- range .hosts }}
+        - {{ . | quote }}
+      {{- end }}
+      secretName: {{ .secretName }}
+  {{- end }}
+{{- end }}
+  gateways:
+  - {{ $fullName }}-gateway
+  hosts:
+  {{- range .Values.istio.hosts }}
+  - {{ . | quote }}
+  {{- end }}
+  http:
+  - match:
+    - uri:
+        prefix: {{ .Values.istio.vs.prefix }} 
+    route:
+    - destination:
+        host: {{ $fullName }}
+        port: 
+          number: {{ .Values.istio.vs.number }}
+{{- end }}

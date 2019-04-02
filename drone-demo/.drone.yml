@@ -1,0 +1,105 @@
+kind: pipeline
+name: default
+
+
+#clone:
+#  depth: 50
+
+# code build --> docker build and docker push --> deploy
+# 使用drone，需要修改drone.yml和charts下面的values.yml
+# 默认push到dev即会进行构建，在提交信息里加入 [CI SKIP] 即可跳过本次构建
+
+
+steps:
+  - name: backend
+    image: harbor.foobar.com/devops/jenkins:jnlp-1.0.0
+    commands:
+      - mvn clean package -Dmaven.test.skip=true
+
+  - name: publish
+    image: plugins/docker
+    settings:
+      username:
+        from_secret: dev_docker_username
+      password:
+        from_secret: dev_docker_password
+      insecure: true
+      repo: 127.0.0.1/cloud/${DRONE_REPO_NAME}
+      registry: 127.0.0.1
+      dockerfile: Dockerfile
+      tags:
+        - latest
+        - "${DRONE_BRANCH}-${DRONE_COMMIT_SHA:0:7}"
+    when:
+      event: push
+      branch: dev
+
+  - name: publish_tag
+    image: plugins/docker
+    settings:
+      username:
+        from_secret: dev_docker_username
+      password:
+        from_secret: dev_docker_password
+      insecure: true
+      repo: 127.0.0.1/cloud/${DRONE_REPO_NAME}
+      registry: 127.0.0.1
+      dockerfile: Dockerfile
+      tags:
+        - "${DRONE_TAG##v}"
+        - "${DRONE_BRANCH}-${DRONE_COMMIT_SHA:0:7}"
+    when:
+      event: tag
+      branch: master
+
+# namespace默认是foobar-cloud
+  - name: helm_deploy
+    image: harbor.foobar.com/devops/drone-helm
+    environment:
+      DEV_API_SERVER:
+        from_secret: dev_api_server
+      DEV_KUBERNETES_TOKEN:
+        from_secret: dev_kubernetes_token
+    settings:
+      skip_tls_verify: true
+      debug: true
+      client_only: true
+      stable_repo_url: https://kubernetes.oss-cn-hangzhou.aliyuncs.com/charts
+      prefix: DEV
+      chart: ./charts/app
+      values: version=${DRONE_BRANCH}-${DRONE_COMMIT_SHA:0:7},image.tag=${DRONE_BRANCH}-${DRONE_COMMIT_SHA:0:7},image.repository=harbor.foobar.com/cloud/${DRONE_REPO_NAME}
+      namespace: foobar-cloud
+      release: "${DRONE_BRANCH}-${DRONE_REPO_NAME}"
+    when:
+      event: push
+      branch: dev
+
+
+# 以下的secret来自kubernetes对面的secret，通过上述的插件读取
+---
+kind: secret
+name: dev_api_server
+get:
+  path: drone-k8s-secrets
+  name: url
+
+---
+kind: secret
+name: dev_kubernetes_token
+get:
+  path: drone-k8s-secrets
+  name: token
+
+---
+kind: secret
+name: dev_docker_username
+get:
+  path: drone-k8s-secrets
+  name: username
+
+---
+kind: secret
+name: dev_docker_password
+get:
+  path: drone-k8s-secrets
+  name: password

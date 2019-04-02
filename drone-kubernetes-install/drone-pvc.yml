@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: drone-pv
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes:
+  - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  nfs:
+    server: 127.0.0.1
+    path: /home/data/k8s/drone
+
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: drone-pvc
+  namespace: devops-cicd
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 2Gi

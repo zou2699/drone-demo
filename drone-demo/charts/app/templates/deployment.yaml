@@ -1,0 +1,70 @@
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: {{ include "mychart.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "mychart.name" . }}
+    helm.sh/chart: {{ include "mychart.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app: {{ .Release.Name }}
+    version: {{ .Values.version }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "mychart.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "mychart.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app: {{ .Release.Name }}
+        version: {{ .Values.version }}
+    spec:
+      imagePullSecrets:
+      - name: {{ .Values.imagePullSecrets }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.containerPort }}
+              protocol: TCP
+          {{- if .Values.probe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probe.livenessProbe.path }}
+              port: {{ .Values.probe.livenessProbe.port }}
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 2 
+            failureThreshold: 3
+            initialDelaySeconds: 60
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probe.readinessProbe.path }}
+              port: {{ .Values.probe.readinessProbe.port }}
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 2  
+            failureThreshold: 3
+            initialDelaySeconds: 60
+           {{- end }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}

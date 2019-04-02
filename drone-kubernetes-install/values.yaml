@@ -1,74 +1,3 @@
-# Drone 安装及使用说明
-
-## 部署
-
-### 使用docker-compose安装在docker上
-
-根据个人的情况，修改下面的参数，然后使用下面的docker-compose.yml就可以了。
-
-对应的host需要能接受来自github的webhook
-
-```yml
-version: '2'
-services:
-  drone-server:
-    image: drone/drone:1.0.0
-    ports:
-      - "127.0.0.1:8085:80"
-    volumes:
-      - /var/lib/drone:/data
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - DRONE_OPEN=true
-      - DRONE_USER_CREATE=username:admin,admin:true
-      - DRONE_SERVER_HOST=<your host>
-      - DRONE_GITHUB_SERVER=https://github.com
-      - DRONE_GITHUB_CLIENT_ID=<your GITHUB_CLIENT_ID>
-      - DRONE_GITHUB_CLIENT_SECRET=<your GITHUB_CLIENT_SECRET>
-      - DRONE_DEBUG=true
-      - DRONE_GITHUB=true
-      - DRONE_PROVIDER=github
-      - DRONE_RPC_SECRET=<random strings 1>
-  drone-agent:
-    image: drone/agent:1.0.0
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    depends_on:
-      - drone-server
-    environment:
-      - DRONE_RPC_SERVER=<your host>
-      - DRONE_RPC_SECRET=<random strings 1>
-      - DRONE_DEBUG=true
-      - DOCKER_HOST=tcp://docker-bind:2375
-  docker-bind:
-     image: docker:dind
-     privileged: true
-     command: --storage-driver=overlay
-
-
-```
-
-
-
-### 使用 helm 安装在kubernetes上
-
-从git上获取最新的charts到本地，然后修改values.yaml上对应的字段，主要是修改image的版本及sourceControl下的相关配置。
-
-需提前装备好pv，以及将gitlab的clientSecretKey保存到对应的namespace下面的secret。
-
-然后执行下面的命令
-
-~~~sh
-helm upgrade --install drone --namespace devops-cicd --debug . --dry-run
-# 如更新了image tag不生效，可执行下面的语句
-helm upgrade --install drone --namespace devops-cicd --debug . --dry-run --reset-values
-~~~
-
->  kubernetes平台下面是使用server + scheduler/kube实现的，如需进行相应的修改，可以参考[官方源码](https://sourcegraph.com/github.com/drone/drone@2a3ffc7/-/blob/cmd/drone-server/inject_scheduler.go#L20:26)中的变量格式，然后注入到server下面的env中即可。
-
-下面的为values.yml中的一些配置，仅作参考。
-
-```yaml
 images:
   ## The official drone (server) image, change tag to use a different version.
   ## ref: https://hub.docker.com/r/drone/drone/tags/
@@ -126,6 +55,25 @@ ingress:
   ##
   enabled: false
 
+  ## Drone Ingress annotations
+  ##
+  # annotations:
+  #   kubernetes.io/ingress.class: nginx
+  #   kubernetes.io/tls-acme: 'true'
+
+  ## Drone hostnames must be provided if Ingress is enabled
+  ##
+  # hosts:
+  #   - drone.domain.io
+
+  ## Drone Ingress TLS configuration secrets
+  ## Must be manually created in the namespace
+  ##
+  # tls:
+  #   - secretName: drone-tls
+  #     hosts:
+  #       - drone.domain.io
+
 sourceControl:
   ## your source control provider: github,gitlab,gitea,gogs,bitbucketCloud,bitbucketServer
   provider:
@@ -142,7 +90,7 @@ sourceControl:
     clientSecretKey: clientSecret
     server: https://github.com
   gitlab:
-    clientID: d4e6ead64e6f26219c9f9522bbf9d5a04d8e038110bd97834351fde75acc789a
+    clientID: d4e6ead64e6f2697834351fde75acc789a
     clientSecretKey: clientSecret 
     server: http://gitlab.foobar.com
   gitea:
@@ -164,7 +112,7 @@ server:
   ## Host shoud be just the hostname.
   ##
   # host: "drone.domain.io"
-  host: "10.0.60.26:32015"
+  host: "192.168.2.20:32015"
 
   ## protocol should be http or https
   protocol: http
@@ -202,11 +150,10 @@ server:
     DRONE_LOGS_DEBUG: "false"
     DRONE_DATABASE_DRIVER: "sqlite3"
     DRONE_DATABASE_DATASOURCE: "/var/lib/drone/drone.sqlite"
-    DRONE_SECRET_SECRET: "1b8e384d9ce5b355501a326182e8ea45"
+    DRONE_SECRET_SECRET: "1b8e384d9c8ea45"
     DRONE_SECRET_ENDPOINT: "http://drone-kubernetes-secrets"
-    DRONE_USER_CREATE: "username:jenkins,admin:true"
-    #DRONE_RUNNER_IMAGE: "harbor.foobar.com/devops/drone-controller:1.0.0"
-    DRONE_KUBERNETES_IMAGE: "harbor.foobar.com/devops/drone-controller:1.0.0"
+    DRONE_USER_CREATE: "username:gituser,admin:true"
+    #DRONE_KUBERNETES_IMAGE: "harbor.foobar.com/devops/drone-controller:1.0.0"
 
   ## Secret environment variables are configured in `server.envSecrets`.
   ## Each item in `server.envSecrets` references a Kubernetes Secret.
@@ -383,192 +330,3 @@ serviceAccount:
   ## The name of the ServiceAccount to use.
   ## If not set and create is true, a name is generated using the fullname template
   name:
-
-```
-
-到此基本已完成kubernetes下drone的安装。
-
-## 使用drone/kubernetes-secrets插件
-
-默认drone对应的secret是和repo进行绑定的，这样的话，每个repo都需要添加secret，而且后期变更也比较麻烦。这里我们将secret 保存在kubernetes里， 使用 drone/kubernetes-secrets 来读取对应的secret。[官方文档](https://docs.drone.io/extend/secrets/kubernetes/install/)下只有docker的安装方式，需要自己修改成kubernetes下的deployment。
-
-安装完成后需要再drone-server下面添加
-
-*DRONE_SECRET_SECRET* 和 *DRONE_SECRET_ENDPOINT*
-
-具体参数可以参见[官网的源码](https://github.com/drone/drone-kubernetes-secrets) 以及[这篇讨论](https://discourse.drone.io/t/kubernetes-external-secrets-not-work/3546/6)
-
-然后将drone的secret保存到对应的namespace下面的secret里。（需要进行base64加密）
-
-![](https://ws1.sinaimg.cn/large/b77abccagy1g1mx4417vwj213g0h1t9r.jpg)
-
-##  使用 .drone.yml
-
-drone默认读取repo的根目录下**.drone.yml**
-
-.drone.yml里保存对应的pipeline
-
-默认的第一步是clone代码，然后build code，build and push image，最后面是用helm部署到kubernetes下面。
-
-下面是我用到的yml，需要将对应的image地址换成官方的或者自己harbor的地址。
-
-```yml
-kind: pipeline
-name: default
-
-
-#clone:
-#  depth: 50
-
-# code build --> docker build and docker push --> deploy
-# 使用drone，需要修改drone.yml和charts下面的values.yml
-# 默认push到dev即会进行构建，在提交信息里加入 [CI SKIP] 即可跳过本次构建
-
-
-steps:
-  - name: backend
-    image: harbor.foobar.com/devops/jenkins:jnlp-1.0.0
-    commands:
-      - mvn clean package -Dmaven.test.skip=true
-
-  - name: publish
-    image: plugins/docker
-    settings:
-      username:
-        from_secret: dev_docker_username
-      password:
-        from_secret: dev_docker_password
-      insecure: true
-      repo: 127.0.0.1/cloud/${DRONE_REPO_NAME}
-      registry: 127.0.0.1
-      dockerfile: Dockerfile
-      tags:
-        - latest
-        - "${DRONE_BRANCH}-${DRONE_COMMIT_SHA:0:7}"
-    when:
-      event: push
-      branch: dev
-
-  - name: publish_tag
-    image: plugins/docker
-    settings:
-      username:
-        from_secret: dev_docker_username
-      password:
-        from_secret: dev_docker_password
-      insecure: true
-      repo: 127.0.0.1/cloud/${DRONE_REPO_NAME}
-      registry: 127.0.0.1
-      dockerfile: Dockerfile
-      tags:
-        - "${DRONE_TAG##v}"
-        - "${DRONE_BRANCH}-${DRONE_COMMIT_SHA:0:7}"
-    when:
-      event: tag
-      branch: master
-
-# namespace默认是foobar-cloud
-  - name: helm_deploy
-    image: harbor.foobar.com/devops/drone-helm
-    environment:
-      DEV_API_SERVER:
-        from_secret: dev_api_server
-      DEV_KUBERNETES_TOKEN:
-        from_secret: dev_kubernetes_token
-    settings:
-      skip_tls_verify: true
-      debug: true
-      client_only: true
-      stable_repo_url: https://kubernetes.oss-cn-hangzhou.aliyuncs.com/charts
-      prefix: DEV
-      chart: ./charts/app
-      values: version=${DRONE_BRANCH}-${DRONE_COMMIT_SHA:0:7},image.tag=${DRONE_BRANCH}-${DRONE_COMMIT_SHA:0:7},image.repository=harbor.foobar.com/cloud/${DRONE_REPO_NAME}
-      namespace: foobar-cloud
-      release: "${DRONE_BRANCH}-${DRONE_REPO_NAME}"
-    when:
-      event: push
-      branch: dev
-
-
-# 以下的secret来自kubernetes对面的secret，通过上述的插件读取
----
-kind: secret
-name: dev_api_server
-get:
-  path: drone-k8s-secrets
-  name: url
-
----
-kind: secret
-name: dev_kubernetes_token
-get:
-  path: drone-k8s-secrets
-  name: token
-
----
-kind: secret
-name: dev_docker_username
-get:
-  path: drone-k8s-secrets
-  name: username
-
----
-kind: secret
-name: dev_docker_password
-get:
-  path: drone-k8s-secrets
-  name: password
-
-```
-
-
-
-## 使用helm插件
-
-上面的最后一步就是利用helm插件，将对面的程序部署到kubernets中。
-
-下面将介绍helm模板的一些使用，建议先[阅读官方的文档](http://plugins.drone.io/ipedrazas/drone-helm/)。
-
-下面是我用到的yml，需要根据个人的情况进行更改。
-
-`stable_repo_url`请保留，否者`helm init`将因为某些原因失败。
-
-```yml
-# namespace默认是foobar-cloud
-  - name: helm_deploy
-    image: harbor.foobar.com/devops/drone-helm
-    environment:
-      DEV_API_SERVER:
-        from_secret: dev_api_server
-      DEV_KUBERNETES_TOKEN:
-        from_secret: dev_kubernetes_token
-    settings:
-      skip_tls_verify: true
-      debug: true
-      client_only: true
-      stable_repo_url: https://kubernetes.oss-cn-hangzhou.aliyuncs.com/charts
-      prefix: DEV
-      chart: ./charts/app
-      values: version=${DRONE_BRANCH}-${DRONE_COMMIT_SHA:0:7},image.tag=${DRONE_BRANCH}-${DRONE_COMMIT_SHA:0:7},image.repository=harbor.foobar.com/cloud/${DRONE_REPO_NAME}
-      namespace: foobar-cloud
-      release: "${DRONE_BRANCH}-${DRONE_REPO_NAME}"
-    when:
-      event: push
-```
-
-
-
-这个插件执行的内容为
-
-```sh
-helm init
-helm upgrade --install RELEASE CHART
-```
-
-settings下面values部分就是替换chart下面values.yml中的变量。
-
-部署完成后，我们可以helm更方便的进行管理drone部署的程序，可以进行回滚和更新。
-
-
-
-> 相关代码存放在[github](https://github.com/zou2699/drone-demo)

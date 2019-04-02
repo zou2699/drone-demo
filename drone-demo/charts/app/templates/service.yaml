@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mychart.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "mychart.name" . }}
+    helm.sh/chart: {{ include "mychart.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+{{- if hasKey .Values.service "type" }}
+  type: {{ .Values.service.type }}
+{{- end }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}
+      protocol: TCP
+      name: http
+{{- if hasKey .Values.service "nodePort" }}
+      nodePort: {{ .Values.service.nodePort }}
+{{- end }}
+
+  selector:
+    app.kubernetes.io/name: {{ include "mychart.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app: {{ .Release.Name }}

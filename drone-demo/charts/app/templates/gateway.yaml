@@ -1,0 +1,38 @@
+{{- if .Values.istio.enabled -}}
+{{- $fullName := include "mychart.fullname" . -}}
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: {{ $fullName }}-gateway
+  labels:
+    app.kubernetes.io/name: {{ include "mychart.name" . }}
+    helm.sh/chart: {{ include "mychart.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- with .Values.ingress.annotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
+spec:
+{{- if .Values.istio.tls }}
+  tls:
+  {{- range .Values.istio.tls }}
+    - hosts:
+      {{- range .hosts }}
+        - {{ . | quote }}
+      {{- end }}
+      secretName: {{ .secretName }}
+  {{- end }}
+{{- end }}
+  selector:
+    istio: ingressgateway
+  servers:
+  {{- range .Values.istio.hosts }}
+    - hosts:
+      - {{ . | quote }}
+  {{- end }}
+      port: 
+        number: {{ .Values.istio.gateway.number }} 
+        name: {{ .Values.istio.gateway.name }}
+        protocol: {{ .Values.istio.gateway.protocol }}
+{{- end }}

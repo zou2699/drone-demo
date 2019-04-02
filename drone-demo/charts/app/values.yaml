@@ -1,0 +1,89 @@
+# Default values for mychart.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: harbor.forbar.com/cloud/demo
+  tag: latest
+  pullPolicy: Always
+
+version: ""
+nameOverride: "forbar-cloud"
+imagePullSecrets: registry-secret
+
+
+
+service:
+  type: ClusterIP
+  # 修改对应的端口
+  targetPort: 3005
+  port: 3005
+
+# 修改容器内部端口
+containerPort: 3005
+
+# 200 <= statuscode < 400 
+probe:
+# 是否开启健康检查，若开启需要修改下面2个的path和port
+  enabled: true
+  livenessProbe:
+    path: /pay/swagger-ui.html
+    port: 3005
+
+  readinessProbe:
+    path: /pay/swagger-ui.html
+    port: 3005
+
+
+istio:
+  enabled: true
+  annotations: {}
+  path: /
+  hosts:
+    - "*"
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+  # 修改gateway和virtualservice对应的prefix和port number
+  gateway:
+    number: 80
+    name: http
+    protocol: HTTP
+  vs:
+    prefix: /pay
+    number: 3005
+
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #  cpu: 100m
+  #  memory: 128Mi
+  # requests:
+  #  cpu: 100m
+  #  memory: 128Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+ingress:
+  enabled: false
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+  # kubernetes.io/tls-acme: "true"
+  path: /
+  hosts:
+    - chart-example.local
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local

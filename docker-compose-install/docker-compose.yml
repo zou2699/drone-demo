@@ -1,0 +1,31 @@
+version: '2'
+services:
+  drone-server:
+    image: drone/drone:1.0.0
+    ports:
+      - "8085:80"
+    volumes:
+      - /var/lib/drone:/data
+    environment:
+      - DRONE_SERVER_HOST=127.0.0.1:8085
+      - DRONE_SERVER_PROTO=http
+      - DRONE_TLS_AUTOCERT=false 
+      - DRONE_GIT_ALWAYS_AUTH=false
+      - DRONE_GITLAB_SERVER=
+      - DRONE_GITLAB_CLIENT_ID=
+      - DRONE_GITLAB_CLIENT_SECRET=
+      - DRONE_DEBUG=true
+      - DRONE_RPC_SECRET=
+  drone-agent:
+    image: drone/agent:1.0.0
+    depends_on:
+      - drone-server
+    environment:
+      - DRONE_RPC_SERVER=http://127.0.0.1:8085
+      - DRONE_RPC_SECRET=
+      - DRONE_DEBUG=true
+      - DOCKER_HOST=tcp://docker-bind:2375
+  docker-bind:
+     image: docker:dind
+     privileged: true
+     command: --storage-driver=overlay
